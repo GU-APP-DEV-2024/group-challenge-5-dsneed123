@@ -29,5 +29,11 @@ class MainMenu : AppCompatActivity() {
             var intent = Intent(this, NasaAPI::class.java)
             startActivity(intent)
         }
+        var fireballsButton = findViewById<Button>(R.id.fireballsButton)
+        fireballsButton.setOnClickListener {
+            var intent = Intent(this, Fireballs::class.java)
+            startActivity(intent)
+        }
+
     }
 }

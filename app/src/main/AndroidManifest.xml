@@ -19,6 +19,7 @@
         <activity
             android:name=".SQLWork"
             android:exported="false" />
+        <activity android:name=".Fireballs" android:exported="false" />
         <activity
             android:name=".MainMenu"
             android:exported="true">
