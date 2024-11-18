@@ -142,7 +142,7 @@ class Fireballs : AppCompatActivity() {
 
                     cmeAdapter.notifyDataSetChanged()
 
-                    textView.text = "There were ${cmeList.size} Big Booms from $startDate to $endDate"
+                    textView.text = "There were ${cmeList.size} Big Booms (Coronal Mass ejections) from $startDate to $endDate"
                     playBoom(cmeList.size)
                 } catch (e: Exception) {
                     println("Error parsing response: ${e.message}")
