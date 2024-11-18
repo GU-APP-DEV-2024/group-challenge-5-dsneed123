@@ -1,6 +1,6 @@
 package com.zybooks.workingwithdata
 
-import android.media.MediaPlayer
+import android.app.DatePickerDialog
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.content.Context
+import android.media.MediaPlayer
 import com.android.volley.Request
 import com.android.volley.RequestQueue
 import com.android.volley.toolbox.Volley
@@ -23,6 +24,8 @@ class Fireballs : AppCompatActivity() {
     private lateinit var cmeAdapter: CMEAdapter
     private val cmeList = mutableListOf<CME>()
     private lateinit var textView: TextView
+    private var startDate: String = ""
+    private var endDate: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,33 +34,27 @@ class Fireballs : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerView)
         textView = findViewById(R.id.textView)
 
-        // Set up RecyclerView
         recyclerView.layoutManager = LinearLayoutManager(this)
         cmeAdapter = CMEAdapter(cmeList)
         recyclerView.adapter = cmeAdapter
+        val startDateButton: Button = findViewById(R.id.startDateButton)
+        val endDateButton: Button = findViewById(R.id.endDateButton)
 
-        val playButton: Button = findViewById(R.id.playButton)
-
-        playButton.setOnClickListener {
-            playBoomFiveTimes()
+        startDateButton.setOnClickListener {
+            showDatePicker(true) // true indicates start date
         }
 
-        // Fetch CME data
-        getCMEAnalysis(this, startDate = "2024-10-01", endDate = "2024-10-31", speed = 500)
+        endDateButton.setOnClickListener {
+            showDatePicker(false) // false indicates end date
+        }
     }
 
-    private fun playBoomFiveTimes() {
-        playCount = 0
-        playBoom()
-    }
-
-    private fun playBoom() {
-        if (playCount < 5) {
+    private fun playBoom(times: Int) {
+        if (times > 0) {
             mediaPlayer = MediaPlayer.create(this, R.raw.boom)
             mediaPlayer.setOnCompletionListener {
                 mediaPlayer.release()
-                playCount++
-                playBoom()
+                playBoom(times - 1)
             }
             mediaPlayer.start()
         }
@@ -71,9 +68,34 @@ class Fireballs : AppCompatActivity() {
         }
     }
 
+    private fun showDatePicker(isStartDate: Boolean) {
+        val calendar = Calendar.getInstance()
+        val year = calendar.get(Calendar.YEAR)
+        val month = calendar.get(Calendar.MONTH)
+        val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+        val datePickerDialog = DatePickerDialog(this, { _, selectedYear, selectedMonth, selectedDay ->
+            val selectedDate = "${selectedYear}-${String.format("%02d", selectedMonth + 1)}-${String.format("%02d", selectedDay)}"
+            if (isStartDate) {
+                startDate = selectedDate
+            } else {
+                endDate = selectedDate
+            }
+
+            val dateButton = if (isStartDate) findViewById<Button>(R.id.startDateButton) else findViewById<Button>(R.id.endDateButton)
+            dateButton.text = "Selected Date: $selectedDate"
+
+            if (startDate.isNotEmpty() && endDate.isNotEmpty()) {
+                getCMEAnalysis(this, startDate = startDate, endDate = endDate, speed = 500)
+            }
+        }, year, month, day)
+
+        datePickerDialog.show()
+    }
+
     fun getCMEAnalysis(context: Context,
-                       startDate: String = getDefaultStartDate(),
-                       endDate: String = getDefaultEndDate(),
+                       startDate: String,
+                       endDate: String,
                        mostAccurateOnly: Boolean = true,
                        completeEntryOnly: Boolean = true,
                        speed: Int = 0,
@@ -81,75 +103,56 @@ class Fireballs : AppCompatActivity() {
                        catalog: String = "ALL",
                        keyword: String = "NONE") {
 
-        // API base URL for CME Analysis
+        if (::mediaPlayer.isInitialized && mediaPlayer.isPlaying) {
+            mediaPlayer.stop()
+            mediaPlayer.release()
+        }
+
         val baseUrl = "https://api.nasa.gov/DONKI/CMEAnalysis"
-
-        // API Key (replace with your actual API key)
         val apiKey = BuildConfig.NASA_API_KEY
-
-        // Construct the URL with query parameters
         val url = "$baseUrl?startDate=$startDate&endDate=$endDate&mostAccurateOnly=$mostAccurateOnly" +
                 "&completeEntryOnly=$completeEntryOnly&speed=$speed&halfAngle=$halfAngle&catalog=$catalog" +
                 "&keyword=$keyword&api_key=$apiKey"
 
-        // Create a RequestQueue using Volley
         val requestQueue: RequestQueue = Volley.newRequestQueue(context)
 
-        // Create a JsonArrayRequest to handle the API response
         val jsonArrayRequest = JsonArrayRequest(
             Request.Method.GET,
             url,
             null,
             { response ->
-                // Handle the successful response (response is a JSONArray)
                 try {
-                    // Clear the current list of CMEs
                     cmeList.clear()
 
-                    // Iterate through the array of CME objects
                     for (i in 0 until response.length()) {
                         val cmeObject = response.getJSONObject(i)
-
-                        // Extract relevant fields from the CME object
                         val time = cmeObject.getString("time21_5")
                         val latitude = cmeObject.getDouble("latitude")
                         val longitude = cmeObject.getDouble("longitude")
+                        val halfAngle = cmeObject.getInt("halfAngle")
                         val speed = cmeObject.getInt("speed")
+                        val associatedCMEID = cmeObject.getString("associatedCMEID")
+                        val note = cmeObject.getString("note")
+                        val catalog = cmeObject.getString("catalog")
+                        val link = cmeObject.getString("link")
 
-                        // Create a CME object and add it to the list
-                        val cme = CME(time, latitude, longitude, speed)
+                        val cme = CME(time, latitude, longitude, halfAngle, speed, associatedCMEID, note, catalog, link)
                         cmeList.add(cme)
                     }
 
-                    // Notify the adapter that the data has changed
                     cmeAdapter.notifyDataSetChanged()
 
-                    // Update the "big booms" message
-                    textView.text = "There were ${cmeList.size} big booms for the selected date range."
+                    textView.text = "There were ${cmeList.size} Big Booms from $startDate to $endDate"
+                    playBoom(cmeList.size)
                 } catch (e: Exception) {
                     println("Error parsing response: ${e.message}")
                 }
             },
             { error ->
-                // Handle error
                 println("Error occurred: ${error.message}")
             }
         )
 
-        // Add the request to the RequestQueue
         requestQueue.add(jsonArrayRequest)
-    }
-
-    // Function to get the default start date (30 days ago)
-    fun getDefaultStartDate(): String {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_YEAR, -30)  // Subtract 30 days
-        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
-    }
-
-    // Function to get the default end date (current date)
-    fun getDefaultEndDate(): String {
-        val calendar = Calendar.getInstance()
-        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
     }
 }
